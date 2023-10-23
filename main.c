@@ -119,7 +119,7 @@ static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t l
 			struct rte_ipv4_tuple input_tuple = {
 				.src_addr = ntohl(peer_ip4_be),
 				.dst_addr = ntohl(local_ip4_be),
-				.dport = local_port_be,
+				.dport = ntohs(local_port_be),
 				.sport = ntohs(peer_port_be),
 			};
 			uint32_t idx = rte_softrss((uint32_t *) &input_tuple, RTE_THASH_V4_L4_LEN, rss_conf.rss_key) & ((1 << (31 - __builtin_clz(dev_info.reta_size))) - 1) /* lsb */;
