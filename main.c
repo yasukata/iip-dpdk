@@ -457,8 +457,6 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 								prev_print = ts.tv_sec * 1000000000UL + ts.tv_nsec;
 							}
 						}
-						if (next_us)
-							usleep(next_us);
 					} while (!__app_should_stop(opaque));
 				}
 			}
