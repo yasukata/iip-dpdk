@@ -435,7 +435,7 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 											{
 												uint16_t i;
 												for (i = 0; i < rte_lcore_count(); i++) {
-													printf("\x1b[31mport[%u]:queue[%u]: rx %lu drop %lu tx %lu fail %lu (rx-error %lu, rx-nobuf %lu tx-error %lu)\n\x1b[39m",
+													printf("\x1b[33mport[%u]:queue[%u]: rx %lu drop %lu tx %lu fail %lu (rx-error %lu, rx-nobuf %lu tx-error %lu)\n\x1b[39m",
 															portid, i,
 															io_opaque[i][portid].stat[stat_idx ? 0 : 1].eth.rx_pkt,
 															io_opaque[i][portid].stat[stat_idx ? 0 : 1].eth.rx_drop,
@@ -449,7 +449,7 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 													memset(&io_opaque[i][portid].stat[stat_idx ? 0 : 1], 0, sizeof(io_opaque[i][portid].stat[stat_idx ? 0 : 1]));
 												}
 											}
-											printf("\x1b[31meth total: rx %lu tx %lu\n\x1b[39m", total_rx, total_tx);
+											printf("\x1b[33meth total: rx %lu tx %lu\n\x1b[39m", total_rx, total_tx);
 										}
 									}
 								}
