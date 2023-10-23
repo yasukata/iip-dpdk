@@ -390,9 +390,9 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 			}
 		}
 		{ /* call app thread init */
-			void *app_thread_opaque = __app_thread_init(workspace,  &io_opaque[rte_lcore_index(rte_lcore_id())][0]); /* TODO: for every port? */
+			void *opaque[2] = { &io_opaque[rte_lcore_index(rte_lcore_id())], NULL, };
 			{
-				void *opaque[2] = { NULL, app_thread_opaque, };
+				opaque[1] = __app_thread_init(workspace, opaque); /* TODO: for every port? */
 				{
 					uint64_t prev_print = 0;
 					do {
