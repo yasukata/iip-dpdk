@@ -39,7 +39,7 @@
 #include <rte_bus_pci.h>
 #include <rte_thash.h>
 
-#define NUM_RX_DESC (64)
+#define NUM_RX_DESC (128)
 #define NUM_TX_DESC NUM_RX_DESC
 #define NUM_NETSTACK_PB (8192)
 #define NUM_NETSTACK_TCP_CONN (512)
