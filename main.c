@@ -128,6 +128,79 @@ static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t l
 	}
 }
 
+static uint16_t iip_ops_l2_hdr_len(void *pkt, void *opaque)
+{
+	{/* unused */
+		(void) pkt;
+		(void) opaque;
+	}
+	return sizeof(struct rte_ether_hdr);
+}
+
+static uint8_t *iip_ops_l2_hdr_src_ptr(void *pkt, void *opaque)
+{
+	return ((struct rte_ether_hdr *)(iip_ops_pkt_get_data(pkt, opaque)))->src_addr.addr_bytes;
+}
+
+static uint8_t *iip_ops_l2_hdr_dst_ptr(void *pkt, void *opaque)
+{
+	return ((struct rte_ether_hdr *)(iip_ops_pkt_get_data(pkt, opaque)))->dst_addr.addr_bytes;
+}
+
+static uint8_t iip_ops_l2_skip(void *pkt, void *opaque)
+{
+	{/* unused */
+		(void) pkt;
+		(void) opaque;
+	}
+	return 0;
+}
+
+static uint16_t iip_ops_l2_ethertype_be(void *pkt, void *opaque)
+{
+	return ((struct rte_ether_hdr *)(iip_ops_pkt_get_data(pkt, opaque)))->ether_type;
+}
+
+static uint16_t iip_ops_l2_addr_len(void *opaque)
+{
+	{/* unused */
+		(void) opaque;
+	}
+	return 6;
+}
+
+static void iip_ops_l2_broadcast_addr(uint8_t bc_mac[], void *opaque)
+{
+	{/* unused */
+		(void) opaque;
+	}
+	memset(bc_mac, 0xff, 6);
+}
+
+static void iip_ops_l2_hdr_craft(void *pkt, uint8_t src[], uint8_t dst[], uint16_t ethertype_be, void *opaque)
+{
+	struct rte_ether_hdr *ethh = (struct rte_ether_hdr *) iip_ops_pkt_get_data(pkt, opaque);
+	memcpy(ethh->src_addr.addr_bytes, src, 6);
+	memcpy(ethh->dst_addr.addr_bytes, dst, 6);
+	ethh->ether_type = ethertype_be;
+}
+
+static uint8_t iip_ops_arp_lhw(void *opaque)
+{
+	{/* unused */
+		(void) opaque;
+	}
+	return 6;
+}
+
+static uint8_t iip_ops_arp_lproto(void *opaque)
+{
+	{/* unused */
+		(void) opaque;
+	}
+	return 4;
+}
+
 static void *iip_ops_pkt_alloc(void *opaque __attribute__((unused)))
 {
 	assert(pktmbuf_pool[rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()))]);
@@ -198,7 +271,7 @@ static void iip_ops_util_now_ns(uint32_t t[3])
 	t[2] = ts.tv_nsec;
 }
 
-static void iip_ops_eth_flush(void *opaque)
+static void iip_ops_l2_flush(void *opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
@@ -226,7 +299,7 @@ static void iip_ops_eth_flush(void *opaque)
 	}
 }
 
-static void iip_ops_eth_push(void *_m, void *opaque)
+static void iip_ops_l2_push(void *_m, void *opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
@@ -240,7 +313,7 @@ static void iip_ops_eth_push(void *_m, void *opaque)
 	}
 	iop->eth.tx.m[iop->eth.tx.cnt++] = (struct rte_mbuf *) _m;
 	if (iop->eth.tx.cnt == ETH_TX_BATCH)
-		iip_ops_eth_flush(opaque);
+		iip_ops_l2_flush(opaque);
 }
 
 static uint8_t iip_ops_nic_feature_offload_tx_scatter_gather(void *opaque)
@@ -287,7 +360,7 @@ static uint8_t iip_ops_nic_offload_udp_rx_checksum(void *m, void *opaque __attri
 static void iip_ops_nic_offload_ip4_tx_checksum_mark(void *m, void *opaque __attribute__((unused)))
 {
 	((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4;
-	((struct rte_mbuf *) m)->l2_len = sizeof(struct iip_eth_hdr);
+	((struct rte_mbuf *) m)->l2_len = sizeof(struct rte_ether_hdr);
 	((struct rte_mbuf *) m)->l3_len = PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4;
 }
 
@@ -315,13 +388,13 @@ static void iip_ops_nic_offload_tcp_tx_checksum_mark(void *m, void *opaque __att
 	((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_TCP_CKSUM;
 }
 
-static void iip_ops_nic_offload_tcp_tx_tso_mark(void *m, void *opaque __attribute__((unused)))
+static void iip_ops_nic_offload_tcp_tx_tso_mark(void *m, void *opaque)
 {
 	if (1500 - PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4 - PB_TCP(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->doff * 4 < PB_TCP_PAYLOAD_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))) {
 		((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
 		((struct rte_mbuf *) m)->l4_len = PB_TCP(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->doff * 4;
 		assert(((struct rte_mbuf *) m)->ol_flags == (RTE_MBUF_F_TX_TCP_SEG | RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4));
-		assert(((struct rte_mbuf *) m)->l2_len == sizeof(struct iip_eth_hdr));
+		assert(((struct rte_mbuf *) m)->l2_len == sizeof(struct rte_ether_hdr));
 		assert(((struct rte_mbuf *) m)->l3_len == PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4);
 		((struct rte_mbuf *) m)->tso_segsz = 1500 - PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4 - PB_TCP(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->doff * 4;
 	}
