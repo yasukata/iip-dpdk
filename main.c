@@ -361,7 +361,7 @@ static void iip_ops_nic_offload_ip4_tx_checksum_mark(void *m, void *opaque __att
 {
 	((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4;
 	((struct rte_mbuf *) m)->l2_len = sizeof(struct rte_ether_hdr);
-	((struct rte_mbuf *) m)->l3_len = PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4;
+	((struct rte_mbuf *) m)->l3_len = (PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->vl & 0x0f) * 4;
 }
 
 static uint8_t iip_ops_nic_feature_offload_tcp_rx_checksum(void *opaque)
@@ -390,13 +390,13 @@ static void iip_ops_nic_offload_tcp_tx_checksum_mark(void *m, void *opaque __att
 
 static void iip_ops_nic_offload_tcp_tx_tso_mark(void *m, void *opaque)
 {
-	if (1500 - PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4 - PB_TCP(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->doff * 4 < PB_TCP_PAYLOAD_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))) {
+	if (1500 - (PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->vl & 0x0f) * 4 - PB_TCP_HDR_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *)) * 4 < PB_TCP_PAYLOAD_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))) {
 		((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
-		((struct rte_mbuf *) m)->l4_len = PB_TCP(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->doff * 4;
+		((struct rte_mbuf *) m)->l4_len = PB_TCP_HDR_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *)) * 4;
 		assert(((struct rte_mbuf *) m)->ol_flags == (RTE_MBUF_F_TX_TCP_SEG | RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4));
 		assert(((struct rte_mbuf *) m)->l2_len == sizeof(struct rte_ether_hdr));
-		assert(((struct rte_mbuf *) m)->l3_len == PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4);
-		((struct rte_mbuf *) m)->tso_segsz = 1500 - PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4 - PB_TCP(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->doff * 4;
+		assert(((struct rte_mbuf *) m)->l3_len == (PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->vl & 0x0f) * 4);
+		((struct rte_mbuf *) m)->tso_segsz = 1500 - (PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->vl & 0x0f) * 4 - PB_TCP_HDR_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *)) * 4;
 	}
 }
 
@@ -426,10 +426,10 @@ static void iip_ops_nic_offload_udp_tx_checksum_mark(void *m, void *opaque __att
 
 static void iip_ops_nic_offload_udp_tx_tso_mark(void *m, void *opaque __attribute__((unused)))
 {
-	if (1500 - PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4 - sizeof(struct iip_udp_hdr) < PB_UDP_PAYLOAD_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))) {
+	if (1500 - (PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->vl & 0x0f) * 4 - sizeof(struct iip_udp_hdr) < PB_UDP_PAYLOAD_LEN(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))) {
 		((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_UDP_SEG;
 		((struct rte_mbuf *) m)->l4_len = sizeof(struct iip_udp_hdr);
-		((struct rte_mbuf *) m)->tso_segsz = 1500 - PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->l * 4 - sizeof(struct iip_udp_hdr);
+		((struct rte_mbuf *) m)->tso_segsz = 1500 - (PB_IP4(rte_pktmbuf_mtod((struct rte_mbuf *) m, uint8_t *))->vl & 0x0f) * 4 - sizeof(struct iip_udp_hdr);
 	}
 }
 
