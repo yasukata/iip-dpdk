@@ -2,9 +2,6 @@ PKGCONF = pkg-config
 
 CD := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-CFLAGS += -O3 -pipe -g -rdynamic
-CFLAGS += -Werror -Wextra -Wall
-
 #############################
 DPDK_VER=23.07
 DPDK_DIR = $(CD)/dpdk
