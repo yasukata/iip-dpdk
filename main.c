@@ -72,6 +72,7 @@ static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS] = { 0 };
 static struct rte_eth_conf nic_conf[RTE_MAX_ETHPORTS] = { 0 };
 static struct rte_mempool *pktmbuf_pool[RTE_MAX_LCORE] = { 0 };
 static struct io_opaque io_opaque[RTE_MAX_LCORE][RTE_MAX_ETHPORTS] = { 0 };
+static int32_t __iosub_max_epoll_wait_ms = 0;
 
 static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t local_ip4_be, uint16_t local_port_be, uint32_t peer_ip4_be, uint16_t peer_port_be, void *opaque)
 {
@@ -429,6 +430,11 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 			io_opaque[rte_lcore_index(rte_lcore_id())][portid].queueid = rte_lcore_index(rte_lcore_id());
 		}
 	}
+	if (__iosub_max_epoll_wait_ms) { /* enable rx interrupt */
+		uint16_t portid;
+		RTE_ETH_FOREACH_DEV(portid)
+			assert(!rte_eth_dev_rx_intr_ctl_q(portid, rte_lcore_index(rte_lcore_id()), RTE_EPOLL_PER_THREAD, RTE_INTR_EVENT_ADD, NULL));
+	}
 	{
 		void *workspace = rte_zmalloc(NULL, iip_workspace_size(), 8);
 		assert(workspace);
@@ -455,24 +461,44 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 				{
 					uint64_t prev_print = 0;
 					do {
-						uint32_t next_us = 1000000U; /* 1 sec */
+						uint64_t total_rx_cnt = 0;
+						uint32_t next_us = (__iosub_max_epoll_wait_ms < 0 ? UINT32_MAX : __iosub_max_epoll_wait_ms * 1000U);
 						{
 							uint16_t portid;
 							RTE_ETH_FOREACH_DEV(portid) {
 								opaque[0] = (void *) &io_opaque[rte_lcore_index(rte_lcore_id())][portid];
 								{
-									uint32_t _next_us = 0;
 									struct rte_mbuf *m[ETH_RX_BATCH];
 									uint16_t cnt = rte_eth_rx_burst(portid, rte_lcore_index(rte_lcore_id()), m, ETH_RX_BATCH);
+									total_rx_cnt += cnt;
 									io_opaque[rte_lcore_index(rte_lcore_id())][portid].stat[stat_idx].eth.rx_pkt += cnt;
-									iip_run(workspace, ports_eth_addr[portid].addr_bytes,
-											ip4_addr_be[portid], (void **) m, cnt, &_next_us, opaque);
-									next_us = _next_us < next_us ? _next_us : next_us;
+									{
+										uint32_t _next_us;
+										iip_run(workspace, ports_eth_addr[portid].addr_bytes,
+												ip4_addr_be[portid], (void **) m, cnt, &_next_us, opaque);
+										next_us = _next_us < next_us ? _next_us : next_us;
+									}
 								}
 								{
-									uint32_t _next_us = 0;
+									uint32_t _next_us;
 									__app_loop(ports_eth_addr[portid].addr_bytes, ip4_addr_be[portid], &_next_us, opaque);
 									next_us = _next_us < next_us ? _next_us : next_us;
+								}
+							}
+							if (!total_rx_cnt && next_us) {
+								{
+									uint16_t portid;
+									RTE_ETH_FOREACH_DEV(portid)
+										assert(!rte_eth_dev_rx_intr_enable(portid, rte_lcore_index(rte_lcore_id())));
+								}
+								{
+									struct rte_epoll_event ev;
+									(void) rte_epoll_wait(RTE_EPOLL_PER_THREAD, &ev, 1, ((next_us == UINT32_MAX) ? __iosub_max_epoll_wait_ms : (int32_t)(next_us / 1000U)));
+								}
+								{
+									uint16_t portid;
+									RTE_ETH_FOREACH_DEV(portid)
+										rte_eth_dev_rx_intr_disable(portid, rte_lcore_index(rte_lcore_id()));
 								}
 							}
 						}
@@ -537,7 +563,7 @@ static int __iosub_main(int argc, char *const *argv)
 
 	{ /* parse arguments */
 		int ch;
-		while ((ch = getopt(argc, argv, "a:")) != -1) {
+		while ((ch = getopt(argc, argv, "a:e:")) != -1) {
 			switch (ch) {
 				case 'a':
 					{ /* format: portid,address (e.g., 1,192.168.0.1 */
@@ -567,6 +593,9 @@ static int __iosub_main(int argc, char *const *argv)
 							}
 						}
 					}
+					break;
+				case 'e':
+					assert(sscanf(optarg, "%d", &__iosub_max_epoll_wait_ms) == 1);
 					break;
 				default:
 					assert(0);
@@ -611,6 +640,8 @@ static int __iosub_main(int argc, char *const *argv)
 				printf("MTU: min %u max %u\n", dev_info.min_mtu, dev_info.max_mtu);
 				assert(nic_conf[portid].rxmode.max_lro_pkt_size < dev_info.max_mtu);
 
+				if (__iosub_max_epoll_wait_ms)
+					nic_conf[portid].intr_conf.rxq = 1;
 				nic_conf[portid].rxmode.mq_mode = RTE_ETH_MQ_RX_RSS;
 				nic_conf[portid].txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
 
