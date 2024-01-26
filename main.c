@@ -535,6 +535,46 @@ static int __iosub_main(int argc, char *const *argv)
 
 	assert(0 < rte_eth_dev_count_avail());
 
+	{ /* parse arguments */
+		int ch;
+		while ((ch = getopt(argc, argv, "a:")) != -1) {
+			switch (ch) {
+				case 'a':
+					{ /* format: portid,address (e.g., 1,192.168.0.1 */
+						char tmpbuf[64] = { 0 };
+						size_t l = strlen(optarg);
+						assert(l < (sizeof(tmpbuf) - 1));
+						memcpy(tmpbuf, optarg, l);
+						{
+							size_t i;
+							for (i = 0; i < l; i++) {
+								if (tmpbuf[i] == ',') {
+									tmpbuf[i] = '\0';
+									break;
+								}
+							}
+							assert(i != 0 && i != l);
+							{
+								uint16_t portid = atoi(&tmpbuf[0]);
+								assert(portid < RTE_MAX_ETHPORTS);
+								assert(inet_pton(AF_INET, &tmpbuf[i + 1], &ip4_addr_be[portid]) == 1);
+								printf("port[%u]: local ip %u.%u.%u.%u\n",
+										portid,
+										(ip4_addr_be[portid] >>  0) & 0x0ff,
+										(ip4_addr_be[portid] >>  8) & 0x0ff,
+										(ip4_addr_be[portid] >> 16) & 0x0ff,
+										(ip4_addr_be[portid] >> 24) & 0x0ff);
+							}
+						}
+					}
+					break;
+				default:
+					assert(0);
+					break;
+			}
+		}
+	}
+
 	{
 		uint32_t num_socket = rte_socket_count();
 		{
@@ -672,46 +712,6 @@ static int __iosub_main(int argc, char *const *argv)
 
 				/* obtain mac addr */
 				assert(rte_eth_macaddr_get(portid, &ports_eth_addr[portid]) >= 0);
-			}
-		}
-	}
-
-	{ /* parse arguments */
-		int ch;
-		while ((ch = getopt(argc, argv, "a:")) != -1) {
-			switch (ch) {
-				case 'a':
-					{ /* format: portid,address (e.g., 1,192.168.0.1 */
-						char tmpbuf[64] = { 0 };
-						size_t l = strlen(optarg);
-						assert(l < (sizeof(tmpbuf) - 1));
-						memcpy(tmpbuf, optarg, l);
-						{
-							size_t i;
-							for (i = 0; i < l; i++) {
-								if (tmpbuf[i] == ',') {
-									tmpbuf[i] = '\0';
-									break;
-								}
-							}
-							assert(i != 0 && i != l);
-							{
-								uint16_t portid = atoi(&tmpbuf[0]);
-								assert(portid < RTE_MAX_ETHPORTS);
-								assert(inet_pton(AF_INET, &tmpbuf[i + 1], &ip4_addr_be[portid]) == 1);
-								printf("port[%u]: local ip %u.%u.%u.%u\n",
-										portid,
-										(ip4_addr_be[portid] >>  0) & 0x0ff,
-										(ip4_addr_be[portid] >>  8) & 0x0ff,
-										(ip4_addr_be[portid] >> 16) & 0x0ff,
-										(ip4_addr_be[portid] >> 24) & 0x0ff);
-							}
-						}
-					}
-					break;
-				default:
-					assert(0);
-					break;
 			}
 		}
 	}
