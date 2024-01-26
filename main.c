@@ -51,6 +51,7 @@ static _Atomic uint8_t stat_idx = 0;
 struct io_opaque {
 	uint16_t portid;
 	uint16_t queueid;
+	uint16_t socketid;
 	struct {
 		struct {
 			struct rte_mbuf *m[ETH_TX_BATCH];
@@ -202,10 +203,12 @@ static uint8_t iip_ops_arp_lproto(void *opaque)
 	return 4;
 }
 
-static void *iip_ops_pkt_alloc(void *opaque __attribute__((unused)))
+static void *iip_ops_pkt_alloc(void *opaque)
 {
-	assert(pktmbuf_pool[rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()))]);
-	return rte_pktmbuf_alloc(pktmbuf_pool[rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()))]);
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	assert(pktmbuf_pool[iop->socketid]);
+	return rte_pktmbuf_alloc(pktmbuf_pool[iop->socketid]);
 }
 
 static void iip_ops_pkt_free(void *pkt, void *opaque __attribute__((unused)))
@@ -241,11 +244,13 @@ static void iip_ops_pkt_decrement_tail(void *pkt, uint16_t len, void *opaque __a
 	rte_pktmbuf_trim((struct rte_mbuf *) pkt, len);
 }
 
-static void *iip_ops_pkt_clone(void *pkt, void *opaque __attribute__((unused)))
+static void *iip_ops_pkt_clone(void *pkt, void *opaque)
 {
-	assert(pktmbuf_pool[rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()))]);
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	assert(pktmbuf_pool[iop->socketid]);
 	assert(pkt);
-	return rte_pktmbuf_clone((struct rte_mbuf *) pkt, pktmbuf_pool[rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()))]);
+	return rte_pktmbuf_clone((struct rte_mbuf *) pkt, pktmbuf_pool[iop->socketid]);
 }
 
 static void iip_ops_pkt_scatter_gather_chain_append(void *pkt_head, void *pkt_tail, void *opaque __attribute__((unused)))
@@ -428,6 +433,7 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 		RTE_ETH_FOREACH_DEV(portid) {
 			io_opaque[rte_lcore_index(rte_lcore_id())][portid].portid = portid;
 			io_opaque[rte_lcore_index(rte_lcore_id())][portid].queueid = rte_lcore_index(rte_lcore_id());
+			io_opaque[rte_lcore_index(rte_lcore_id())][portid].socketid = rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()));
 		}
 	}
 	if (__iosub_max_epoll_wait_ms) { /* enable rx interrupt */
