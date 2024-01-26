@@ -428,18 +428,19 @@ static void iip_ops_nic_offload_udp_tx_tso_mark(void *m, void *opaque __attribut
 /* thread loop */
 static int lcore_thread_fn(void *__unused __attribute__((unused)))
 {
+	uint16_t core_idx = rte_lcore_index(rte_lcore_id());
 	{ /* set queue id */
 		uint16_t portid;
 		RTE_ETH_FOREACH_DEV(portid) {
-			io_opaque[rte_lcore_index(rte_lcore_id())][portid].portid = portid;
-			io_opaque[rte_lcore_index(rte_lcore_id())][portid].queueid = rte_lcore_index(rte_lcore_id());
-			io_opaque[rte_lcore_index(rte_lcore_id())][portid].socketid = rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()));
+			io_opaque[core_idx][portid].portid = portid;
+			io_opaque[core_idx][portid].queueid = core_idx;
+			io_opaque[core_idx][portid].socketid = rte_socket_id_by_idx(rte_lcore_to_socket_id(rte_lcore_id()));
 		}
 	}
 	if (__iosub_max_epoll_wait_ms) { /* enable rx interrupt */
 		uint16_t portid;
 		RTE_ETH_FOREACH_DEV(portid)
-			assert(!rte_eth_dev_rx_intr_ctl_q(portid, rte_lcore_index(rte_lcore_id()), RTE_EPOLL_PER_THREAD, RTE_INTR_EVENT_ADD, NULL));
+			assert(!rte_eth_dev_rx_intr_ctl_q(portid, core_idx, RTE_EPOLL_PER_THREAD, RTE_INTR_EVENT_ADD, NULL));
 	}
 	{
 		void *workspace = rte_zmalloc(NULL, iip_workspace_size(), 8);
@@ -461,9 +462,9 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 			}
 		}
 		{ /* call app thread init */
-			void *opaque[2] = { &io_opaque[rte_lcore_index(rte_lcore_id())], NULL, };
+			void *opaque[2] = { &io_opaque[core_idx], NULL, };
 			{
-				opaque[1] = __app_thread_init(workspace, rte_lcore_index(rte_lcore_id()), opaque); /* TODO: for every port? */
+				opaque[1] = __app_thread_init(workspace, core_idx, opaque); /* TODO: for every port? */
 				{
 					uint64_t prev_print = 0;
 					do {
@@ -472,12 +473,12 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 						{
 							uint16_t portid;
 							RTE_ETH_FOREACH_DEV(portid) {
-								opaque[0] = (void *) &io_opaque[rte_lcore_index(rte_lcore_id())][portid];
+								opaque[0] = (void *) &io_opaque[core_idx][portid];
 								{
 									struct rte_mbuf *m[ETH_RX_BATCH];
-									uint16_t cnt = rte_eth_rx_burst(portid, rte_lcore_index(rte_lcore_id()), m, ETH_RX_BATCH);
+									uint16_t cnt = rte_eth_rx_burst(portid, core_idx, m, ETH_RX_BATCH);
 									total_rx_cnt += cnt;
-									io_opaque[rte_lcore_index(rte_lcore_id())][portid].stat[stat_idx].eth.rx_pkt += cnt;
+									io_opaque[core_idx][portid].stat[stat_idx].eth.rx_pkt += cnt;
 									{
 										uint32_t _next_us;
 										iip_run(workspace, ports_eth_addr[portid].addr_bytes,
@@ -495,7 +496,7 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 								{
 									uint16_t portid;
 									RTE_ETH_FOREACH_DEV(portid)
-										assert(!rte_eth_dev_rx_intr_enable(portid, rte_lcore_index(rte_lcore_id())));
+										assert(!rte_eth_dev_rx_intr_enable(portid, core_idx));
 								}
 								{
 									struct rte_epoll_event ev;
@@ -504,11 +505,11 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 								{
 									uint16_t portid;
 									RTE_ETH_FOREACH_DEV(portid)
-										rte_eth_dev_rx_intr_disable(portid, rte_lcore_index(rte_lcore_id()));
+										rte_eth_dev_rx_intr_disable(portid, core_idx);
 								}
 							}
 						}
-						if (!rte_lcore_index(rte_lcore_id())) {
+						if (!core_idx) {
 							struct timespec ts;
 							assert(!clock_gettime(CLOCK_REALTIME, &ts));
 							if (prev_print + 1000000000UL < ts.tv_sec * 1000000000UL + ts.tv_nsec) {
