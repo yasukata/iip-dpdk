@@ -426,7 +426,7 @@ static void iip_ops_nic_offload_udp_tx_tso_mark(void *m, void *opaque __attribut
 }
 
 /* thread loop */
-static int lcore_thread_fn(void *__unused __attribute__((unused)))
+static int lcore_thread_fn(void *__app_global_opaque)
 {
 	uint16_t core_idx = rte_lcore_index(rte_lcore_id());
 	{ /* set queue id */
@@ -462,9 +462,9 @@ static int lcore_thread_fn(void *__unused __attribute__((unused)))
 			}
 		}
 		{ /* call app thread init */
-			void *opaque[2] = { &io_opaque[core_idx], NULL, };
+			void *opaque[3] = { &io_opaque[core_idx], __app_global_opaque, NULL, };
 			{
-				opaque[1] = __app_thread_init(workspace, core_idx, opaque); /* TODO: for every port? */
+				opaque[2] = __app_thread_init(workspace, core_idx, opaque); /* TODO: for every port? */
 				{
 					uint64_t prev_print = 0;
 					do {
@@ -754,9 +754,7 @@ static int __iosub_main(int argc, char *const *argv)
 		}
 	}
 
-	__app_init(argc, argv);
-
-	rte_eal_mp_remote_launch(lcore_thread_fn, NULL, CALL_MAIN); /* start worker threads */
+	rte_eal_mp_remote_launch(lcore_thread_fn, __app_init(argc, argv), CALL_MAIN); /* start worker threads */
 
 	{ /* wait for threads */
 		unsigned lcore_id;
