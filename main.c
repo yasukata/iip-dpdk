@@ -754,7 +754,11 @@ static int __iosub_main(int argc, char *const *argv)
 		}
 	}
 
-	rte_eal_mp_remote_launch(lcore_thread_fn, __app_init(argc, argv), CALL_MAIN); /* start worker threads */
+	{
+		void *app_global_opaque = __app_init(argc, argv);
+		rte_eal_mp_remote_launch(lcore_thread_fn, app_global_opaque, CALL_MAIN); /* start worker threads */
+		__app_exit(app_global_opaque);
+	}
 
 	{ /* wait for threads */
 		unsigned lcore_id;
