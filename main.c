@@ -488,7 +488,7 @@ static int lcore_thread_fn(void *__app_global_opaque)
 								}
 								{
 									uint32_t _next_us;
-									__app_loop(ports_eth_addr[portid].addr_bytes, ip4_addr_be[portid], &_next_us, opaque);
+									__app_loop(workspace, ports_eth_addr[portid].addr_bytes, ip4_addr_be[portid], &_next_us, opaque);
 									next_us = _next_us < next_us ? _next_us : next_us;
 								}
 							}
