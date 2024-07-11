@@ -642,8 +642,8 @@ static int __iosub_main(int argc, char *const *argv)
 
 				printf("driver: %s\n", dev_info.driver_name);
 				printf("max queue rx %u tx %u\n", dev_info.max_rx_queues, dev_info.max_tx_queues);
-				assert(num_queue < dev_info.max_rx_queues);
-				assert(num_queue < dev_info.max_tx_queues);
+				assert(num_queue <= dev_info.max_rx_queues);
+				assert(num_queue <= dev_info.max_tx_queues);
 				printf("MTU: min %u max %u\n", dev_info.min_mtu, dev_info.max_mtu);
 				assert(nic_conf[portid].rxmode.max_lro_pkt_size < dev_info.max_mtu);
 
