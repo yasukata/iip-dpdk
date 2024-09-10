@@ -39,12 +39,24 @@
 #include <rte_bus_pci.h>
 #include <rte_thash.h>
 
+#ifndef NUM_RX_DESC
 #define NUM_RX_DESC (128)
+#endif
+#ifndef NUM_TX_DESC
 #define NUM_TX_DESC NUM_RX_DESC
+#endif
+#ifndef NUM_NETSTACK_PB
 #define NUM_NETSTACK_PB (8192)
+#endif
+#ifndef NUM_NETSTACK_TCP_CONN
 #define NUM_NETSTACK_TCP_CONN (512)
+#endif
+#ifndef ETH_RX_BATCH
 #define ETH_RX_BATCH (32)
-#define ETH_TX_BATCH (32)
+#endif
+#ifndef ETH_TX_BATCH
+#define ETH_TX_BATCH ETH_RX_BATCH
+#endif
 
 static _Atomic uint8_t stat_idx = 0;
 
