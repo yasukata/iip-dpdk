@@ -284,14 +284,6 @@ static void iip_ops_l2_flush(void *opaque)
 		if (cnt != iop->eth.tx.cnt) {
 			//printf("tx failed: %u %u\n", cnt, iop->eth.tx.cnt);
 			{
-				struct rte_eth_stats s;
-				assert(!rte_eth_stats_get(iop->portid, &s));
-				if (s.oerrors) {
-					printf("output error %lu\n", s.oerrors);
-					assert(!rte_eth_stats_reset(iop->portid));
-				}
-			}
-			{
 				uint16_t i;
 				for (i = cnt; i < iop->eth.tx.cnt; i++)
 					rte_pktmbuf_free(iop->eth.tx.m[i]);
