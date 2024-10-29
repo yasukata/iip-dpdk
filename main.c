@@ -105,8 +105,12 @@ static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t l
 		default:
 			break;
 		}
-		if (!is_supported)
-			return UINT16_MAX;
+		if (!is_supported) {
+			if (rte_lcore_count() /* XXX: assuming this is num_queue */ == 1)
+				return 0;
+			else
+				return UINT16_MAX;
+		}
 	}
 	{
 		struct rte_eth_dev_info dev_info = { 0 };
