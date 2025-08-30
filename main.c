@@ -58,7 +58,12 @@
 #define ETH_TX_BATCH ETH_RX_BATCH
 #endif
 
+#ifdef __cplusplus
+#include <atomic>
+static std::atomic<uint8_t> stat_idx = 0;
+#else
 static _Atomic uint8_t stat_idx = 0;
+#endif
 
 struct io_opaque {
 	uint16_t portid;
@@ -81,10 +86,10 @@ struct io_opaque {
 };
 
 static uint32_t ip4_addr_be[RTE_MAX_ETHPORTS];
-static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS] = { 0 };
-static struct rte_eth_conf nic_conf[RTE_MAX_ETHPORTS] = { 0 };
-static struct rte_mempool *pktmbuf_pool[RTE_MAX_LCORE] = { 0 };
-static struct io_opaque io_opaque[RTE_MAX_LCORE][RTE_MAX_ETHPORTS] = { 0 };
+static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
+static struct rte_eth_conf nic_conf[RTE_MAX_ETHPORTS];
+static struct rte_mempool *pktmbuf_pool[RTE_MAX_LCORE];
+static struct io_opaque io_opaque[RTE_MAX_LCORE][RTE_MAX_ETHPORTS];
 static int32_t __iosub_max_epoll_wait_ms = 0;
 
 static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t local_ip4_be, uint16_t local_port_be, uint32_t peer_ip4_be, uint16_t peer_port_be, void *opaque)
@@ -113,23 +118,26 @@ static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t l
 		}
 	}
 	{
-		struct rte_eth_dev_info dev_info = { 0 };
+		struct rte_eth_dev_info dev_info;
+		memset(&dev_info, 0, sizeof(dev_info));
 		assert(rte_eth_dev_info_get(iop->portid, &dev_info) >= 0);
 
-		uint8_t rss_key_buf[255] = { 0 };
-		struct rte_eth_rss_conf rss_conf = { .rss_key = rss_key_buf, .rss_key_len = sizeof(rss_key_buf), };
+		uint8_t rss_key_buf[255];
+		struct rte_eth_rss_conf rss_conf;
+		memset(rss_key_buf, 0, sizeof(rss_key_buf));
+		rss_conf.rss_key = rss_key_buf;
+		rss_conf.rss_key_len = sizeof(rss_key_buf);
 		assert(!rte_eth_dev_rss_hash_conf_get(iop->portid, &rss_conf));
 
-		struct rte_eth_rss_reta_entry64 reta_conf[8] = {
-			{ .mask = 0xffffffffffffffff, },
-			{ .mask = 0xffffffffffffffff, },
-			{ .mask = 0xffffffffffffffff, },
-			{ .mask = 0xffffffffffffffff, },
-			{ .mask = 0xffffffffffffffff, },
-			{ .mask = 0xffffffffffffffff, },
-			{ .mask = 0xffffffffffffffff, },
-			{ .mask = 0xffffffffffffffff, },
-		};
+		struct rte_eth_rss_reta_entry64 reta_conf[8];
+		reta_conf[0].mask = 0xffffffffffffffff;
+		reta_conf[1].mask = 0xffffffffffffffff;
+		reta_conf[2].mask = 0xffffffffffffffff;
+		reta_conf[3].mask = 0xffffffffffffffff;
+		reta_conf[4].mask = 0xffffffffffffffff;
+		reta_conf[5].mask = 0xffffffffffffffff;
+		reta_conf[6].mask = 0xffffffffffffffff;
+		reta_conf[7].mask = 0xffffffffffffffff;
 		assert(dev_info.reta_size <= 512);
 		assert(!rte_eth_dev_rss_reta_query(iop->portid, reta_conf, dev_info.reta_size));
 
@@ -567,6 +575,13 @@ static int lcore_thread_fn(void *__app_global_opaque)
 
 static int __iosub_main(int argc, char *const *argv)
 {
+	{ /* zero clear global variables */
+		memset(ports_eth_addr, 0, sizeof(ports_eth_addr));
+		memset(nic_conf, 0, sizeof(nic_conf));
+		memset(pktmbuf_pool, 0, sizeof(pktmbuf_pool));
+		memset(io_opaque, 0, sizeof(io_opaque));
+	}
+
 	{ /* dpdk init */
 		int ret;
 		assert((ret = rte_eal_init(argc, (char **) argv)) >= 0);
@@ -582,10 +597,11 @@ static int __iosub_main(int argc, char *const *argv)
 			switch (ch) {
 				case 'a':
 					{ /* format: portid,address (e.g., 1,192.168.0.1 */
-						char tmpbuf[64] = { 0 };
+						char tmpbuf[64];
 						size_t l = strlen(optarg);
 						assert(l < (sizeof(tmpbuf) - 1));
 						memcpy(tmpbuf, optarg, l);
+						tmpbuf[l] = '\0';
 						{
 							size_t i;
 							for (i = 0; i < l; i++) {
@@ -626,7 +642,7 @@ static int __iosub_main(int argc, char *const *argv)
 			for (i = 0; i < num_socket; i++) {
 				printf("create mbuf pool for socket %u\n", i);
 				{
-					char mempool_name[32] = { 0 };
+					char mempool_name[32];
 					snprintf(mempool_name, sizeof(mempool_name), "mem-%u", i);
 					assert((pktmbuf_pool[i] = rte_pktmbuf_pool_create(mempool_name,
 									RTE_MAX(rte_eth_dev_count_avail() * rte_lcore_count() * (NUM_RX_DESC + NUM_TX_DESC) * 2, 8192U),
@@ -645,7 +661,8 @@ static int __iosub_main(int argc, char *const *argv)
 			RTE_ETH_FOREACH_DEV(portid) {
 				uint16_t nb_rxd = NUM_RX_DESC;
 				uint16_t nb_txd = NUM_TX_DESC;
-				struct rte_eth_dev_info dev_info = { 0 };
+				struct rte_eth_dev_info dev_info;
+				memset(&dev_info, 0, sizeof(dev_info));
 				assert(rte_eth_dev_info_get(portid, &dev_info) >= 0);
 
 				printf("driver: %s\n", dev_info.driver_name);
