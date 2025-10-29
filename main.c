@@ -636,19 +636,31 @@ static int __iosub_main(int argc, char *const *argv)
 	}
 
 	{
-		uint32_t num_socket = rte_socket_count();
+		uint32_t socket_core_cnt[RTE_MAX_NUMA_NODES];
+		memset(socket_core_cnt, 0, sizeof(socket_core_cnt));
+		{
+			uint32_t core_id;
+			RTE_LCORE_FOREACH(core_id) {
+				uint32_t socket_id = rte_lcore_to_socket_id(core_id);
+				assert(socket_id < RTE_MAX_NUMA_NODES);
+				socket_core_cnt[socket_id]++;
+			}
+		}
 		{
 			uint32_t i;
-			for (i = 0; i < num_socket; i++) {
-				printf("create mbuf pool for socket %u\n", i);
-				{
-					char mempool_name[32];
-					snprintf(mempool_name, sizeof(mempool_name), "mem-%u", i);
-					assert((pktmbuf_pool[i] = rte_pktmbuf_pool_create(mempool_name,
-									RTE_MAX(rte_eth_dev_count_avail() * rte_lcore_count() * (NUM_RX_DESC + NUM_TX_DESC) * 2, 8192U),
-									512, 0,
-									0xffff /* large buffer */,
-									rte_socket_id_by_idx(i))) != NULL);
+			for (i = 0; i < RTE_MAX_NUMA_NODES; i++) {
+				if (socket_core_cnt[i]) {
+					uint32_t cache_size = 512; /* batch size took from the core pool */
+					uint32_t mem_size = RTE_MAX((NUM_RX_DESC + NUM_TX_DESC + 512 /* batch size */) * 2 * socket_core_cnt[i], 8192U);
+					printf("create mbuf pool for socket %u (%u cores, size %u bytes, cache cnt %u)\n", i, socket_core_cnt[i], mem_size, cache_size);
+					{
+						char mempool_name[32];
+						snprintf(mempool_name, sizeof(mempool_name), "mem-%u", i);
+						assert((pktmbuf_pool[i] = rte_pktmbuf_pool_create(mempool_name,
+										mem_size, cache_size, 0,
+										0xffff /* large buffer */,
+										rte_socket_id_by_idx(i))) != NULL);
+					}
 				}
 			}
 		}
@@ -760,15 +772,16 @@ static int __iosub_main(int argc, char *const *argv)
 
 				printf("configuring port %u with %d queues (tx %u rx %u)\n", portid, num_queue, nb_txd, nb_rxd);
 				{
-					uint16_t i;
-					for (i = 0; i < num_queue; i++) {
+					uint16_t i = 0, core_id;
+					RTE_LCORE_FOREACH(core_id) {
 						assert(rte_eth_rx_queue_setup(portid, i, nb_rxd,
 									rte_eth_dev_socket_id(portid),
 									&dev_info.default_rxconf,
-									pktmbuf_pool[rte_socket_id_by_idx(rte_lcore_to_socket_id(i))]) >= 0);
+									pktmbuf_pool[rte_socket_id_by_idx(rte_lcore_to_socket_id(core_id))]) >= 0);
 						assert(rte_eth_tx_queue_setup(portid, i, nb_txd,
 									rte_eth_dev_socket_id(portid),
 									&dev_info.default_txconf) >= 0);
+						i++;
 					}
 				}
 				/* start interface */
