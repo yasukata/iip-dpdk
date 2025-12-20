@@ -786,7 +786,8 @@ static int __iosub_main(int argc, char *const *argv)
 				}
 				/* start interface */
 				assert(rte_eth_dev_start(portid) >= 0);
-				assert(rte_eth_promiscuous_enable(portid) >= 0);
+				if (rte_eth_promiscuous_enable(portid) < 0)
+					printf("[WARNING] promiscuous mode is not activated, but we continue to run\n");
 
 				/* obtain mac addr */
 				assert(rte_eth_macaddr_get(portid, &ports_eth_addr[portid]) >= 0);
