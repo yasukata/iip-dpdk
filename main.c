@@ -690,81 +690,98 @@ static int __iosub_main(int argc, char *const *argv)
 					nic_conf[portid].intr_conf.rxq = 1;
 				nic_conf[portid].rxmode.mq_mode = RTE_ETH_MQ_RX_RSS;
 				nic_conf[portid].txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
-
-				if (!strncmp(dev_info.driver_name, "net_tap", strlen("net_tap")))
-					printf("we do not employ offloading features of a tap device\n");
-				else {
+				{
+					const char *skip_targets[] = {
+						"net_tap",
+						"net_vhost",
+						"net_virtio_user",
+						NULL,
+					};
 					{
-						printf("RSS TCP: ");
-						if (dev_info.flow_type_rss_offloads & RTE_ETH_RSS_TCP) {
-							nic_conf[portid].rx_adv_conf.rss_conf.rss_hf |= RTE_ETH_RSS_TCP & dev_info.flow_type_rss_offloads;
-							printf("ok (nic feature %lx tcp-rss-all %lx)\n", dev_info.flow_type_rss_offloads, RTE_ETH_RSS_TCP);
-						} else printf("no\n"); /* TODO: software-based RSS */
+						uint64_t i;
+						for (i = 0; skip_targets[i]; i++) {
+							if (strlen(dev_info.driver_name) == strlen(skip_targets[i])
+									&& !strncmp(dev_info.driver_name, skip_targets[i], strlen(skip_targets[i]))) {
+								printf("we do not activate offloading features of %s\n", skip_targets[i]);
+								nic_conf[portid].rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
+								dev_info.flow_type_rss_offloads = 0;
+								dev_info.rx_offload_capa = 0;
+								dev_info.tx_offload_capa = 0;
+								break;
+							}
+						}
 					}
-					{
-						printf("RSS UDP: ");
-						if (dev_info.flow_type_rss_offloads & RTE_ETH_RSS_UDP) {
-							nic_conf[portid].rx_adv_conf.rss_conf.rss_hf |= RTE_ETH_RSS_UDP & dev_info.flow_type_rss_offloads;
-							printf("ok (nic feature %lx udp-rss-all %lx)\n", dev_info.flow_type_rss_offloads, RTE_ETH_RSS_TCP);
-						} else printf("no\n"); /* TODO: software-based RSS */
-					}
-					{
-						printf("RX checksum: ");
-						if (dev_info.rx_offload_capa & RTE_ETH_RX_OFFLOAD_CHECKSUM) {
-							nic_conf[portid].rxmode.offloads |= RTE_ETH_RX_OFFLOAD_CHECKSUM;
-							printf("ok\n");
-						} else printf("no\n");
-					}
-					{
-						printf("RX LRO: ");
-						if (dev_info.rx_offload_capa & RTE_ETH_RX_OFFLOAD_TCP_LRO) {
-							nic_conf[portid].rxmode.offloads |= RTE_ETH_RX_OFFLOAD_TCP_LRO;
-							nic_conf[portid].rxmode.max_lro_pkt_size = dev_info.max_lro_pkt_size;
-							printf("ok (max lro pkt size %u)\n", nic_conf[portid].rxmode.max_lro_pkt_size);
-						} else printf("no\n");
-					}
-					{
-						printf("TX multi-seg: ");
-						if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MULTI_SEGS) {
-							nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_MULTI_SEGS;
-							printf("ok\n");
-						} else printf("no\n");
-					}
-					{
-						printf("TX IPv4 checksum: ");
-						if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM) {
-							nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_IPV4_CKSUM;
-							printf("ok\n");
-						} else printf("no\n");
-					}
-					{
-						printf("TX TCP checksum: ");
-						if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_TCP_CKSUM) {
-							nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_TCP_CKSUM;
-							printf("ok\n");
-						} else printf("no\n");
-					}
-					{
-						printf("TX TCP TSO: ");
-						if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_TCP_TSO) {
-							nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_TCP_TSO;
-							printf("ok\n");
-						} else printf("no\n");
-					}
-					{
-						printf("TX UDP checksum: ");
-						if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_UDP_CKSUM) {
-							nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
-							printf("ok\n");
-						} else printf("no\n");
-					}
-					{
-						printf("TX UDP TSO: ");
-						if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_UDP_TSO) {
-							nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_UDP_TSO;
-							printf("ok\n");
-						} else printf("no\n");
-					}
+				}
+				{
+					printf("RSS TCP: ");
+					if (dev_info.flow_type_rss_offloads & RTE_ETH_RSS_TCP) {
+						nic_conf[portid].rx_adv_conf.rss_conf.rss_hf |= RTE_ETH_RSS_TCP & dev_info.flow_type_rss_offloads;
+						printf("ok (nic feature %lx tcp-rss-all %lx)\n", dev_info.flow_type_rss_offloads, RTE_ETH_RSS_TCP);
+					} else printf("no\n"); /* TODO: software-based RSS */
+				}
+				{
+					printf("RSS UDP: ");
+					if (dev_info.flow_type_rss_offloads & RTE_ETH_RSS_UDP) {
+						nic_conf[portid].rx_adv_conf.rss_conf.rss_hf |= RTE_ETH_RSS_UDP & dev_info.flow_type_rss_offloads;
+						printf("ok (nic feature %lx udp-rss-all %lx)\n", dev_info.flow_type_rss_offloads, RTE_ETH_RSS_TCP);
+					} else printf("no\n"); /* TODO: software-based RSS */
+				}
+				{
+					printf("RX checksum: ");
+					if (dev_info.rx_offload_capa & RTE_ETH_RX_OFFLOAD_CHECKSUM) {
+						nic_conf[portid].rxmode.offloads |= RTE_ETH_RX_OFFLOAD_CHECKSUM;
+						printf("ok\n");
+					} else printf("no\n");
+				}
+				{
+					printf("RX LRO: ");
+					if (dev_info.rx_offload_capa & RTE_ETH_RX_OFFLOAD_TCP_LRO) {
+						nic_conf[portid].rxmode.offloads |= RTE_ETH_RX_OFFLOAD_TCP_LRO;
+						nic_conf[portid].rxmode.max_lro_pkt_size = dev_info.max_lro_pkt_size;
+						printf("ok (max lro pkt size %u)\n", nic_conf[portid].rxmode.max_lro_pkt_size);
+					} else printf("no\n");
+				}
+				{
+					printf("TX multi-seg: ");
+					if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MULTI_SEGS) {
+						nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_MULTI_SEGS;
+						printf("ok\n");
+					} else printf("no\n");
+				}
+				{
+					printf("TX IPv4 checksum: ");
+					if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM) {
+						nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_IPV4_CKSUM;
+						printf("ok\n");
+					} else printf("no\n");
+				}
+				{
+					printf("TX TCP checksum: ");
+					if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_TCP_CKSUM) {
+						nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_TCP_CKSUM;
+						printf("ok\n");
+					} else printf("no\n");
+				}
+				{
+					printf("TX TCP TSO: ");
+					if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_TCP_TSO) {
+						nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_TCP_TSO;
+						printf("ok\n");
+					} else printf("no\n");
+				}
+				{
+					printf("TX UDP checksum: ");
+					if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_UDP_CKSUM) {
+						nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
+						printf("ok\n");
+					} else printf("no\n");
+				}
+				{
+					printf("TX UDP TSO: ");
+					if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_UDP_TSO) {
+						nic_conf[portid].txmode.offloads |= RTE_ETH_TX_OFFLOAD_UDP_TSO;
+						printf("ok\n");
+					} else printf("no\n");
 				}
 
 				assert(rte_eth_dev_configure(portid, num_queue, num_queue, &nic_conf[portid]) >= 0);
