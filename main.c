@@ -692,6 +692,24 @@ static int __iosub_main(int argc, char *const *argv)
 				nic_conf[portid].txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
 				{
 					const char *skip_targets[] = {
+						"net_virtio_user",
+						NULL,
+					};
+					{
+						uint64_t i;
+						for (i = 0; skip_targets[i]; i++) {
+							if (strlen(dev_info.driver_name) == strlen(skip_targets[i])
+									&& !strncmp(dev_info.driver_name, skip_targets[i], strlen(skip_targets[i]))) {
+								printf("we do not activate RSS of %s\n", skip_targets[i]);
+								nic_conf[portid].rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
+								dev_info.flow_type_rss_offloads = 0;
+								break;
+							}
+						}
+					}
+				}
+				{
+					const char *skip_targets[] = {
 						"net_tap",
 						"net_vhost",
 						"net_virtio_user",
@@ -703,8 +721,6 @@ static int __iosub_main(int argc, char *const *argv)
 							if (strlen(dev_info.driver_name) == strlen(skip_targets[i])
 									&& !strncmp(dev_info.driver_name, skip_targets[i], strlen(skip_targets[i]))) {
 								printf("we do not activate offloading features of %s\n", skip_targets[i]);
-								nic_conf[portid].rxmode.mq_mode = RTE_ETH_MQ_RX_NONE;
-								dev_info.flow_type_rss_offloads = 0;
 								dev_info.rx_offload_capa = 0;
 								dev_info.tx_offload_capa = 0;
 								break;
