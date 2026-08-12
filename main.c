@@ -292,21 +292,18 @@ static void iip_ops_l2_flush(void *opaque)
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
 	if (iop->eth.tx.cnt) {
-		uint16_t prepared = rte_eth_tx_prepare(iop->portid, iop->queueid, iop->eth.tx.m, iop->eth.tx.cnt);
-		if (prepared != iop->eth.tx.cnt) {
-			uint16_t i;
-			for (i = 0; i < iop->eth.tx.cnt; i++) /* cancel transmission */
-				rte_pktmbuf_free(iop->eth.tx.m[i]);
-			iop->stat[stat_idx].eth.tx_fail += iop->eth.tx.cnt - prepared;
-			iop->eth.tx.cnt = 0;
-		} else {
-			uint16_t cnt = rte_eth_tx_burst(iop->portid, iop->queueid, iop->eth.tx.m, prepared);
-			if (cnt != prepared) /* keep non-transmitted packets */
-				memmove(&iop->eth.tx.m[0], &iop->eth.tx.m[cnt], sizeof(iop->eth.tx.m[0]) * (prepared - cnt));
-			iop->stat[stat_idx].eth.tx_pkt += cnt;
-			iop->stat[stat_idx].eth.tx_fail += prepared - cnt;
-			iop->eth.tx.cnt -= cnt;
+		uint16_t cnt = rte_eth_tx_burst(iop->portid, iop->queueid, iop->eth.tx.m, rte_eth_tx_prepare(iop->portid, iop->queueid, iop->eth.tx.m, iop->eth.tx.cnt));
+		if (cnt != iop->eth.tx.cnt) {
+			//printf("tx failed: %u %u\n", cnt, iop->eth.tx.cnt);
+			{
+				uint16_t i;
+				for (i = cnt; i < iop->eth.tx.cnt; i++)
+					rte_pktmbuf_free(iop->eth.tx.m[i]);
+			}
 		}
+		iop->stat[stat_idx].eth.tx_pkt += cnt;
+		iop->stat[stat_idx].eth.tx_fail += iop->eth.tx.cnt - cnt;
+		iop->eth.tx.cnt = 0;
 	}
 }
 
@@ -315,12 +312,6 @@ static void iip_ops_l2_push(void *_m, void *opaque)
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
 	rte_pktmbuf_pkt_len((struct rte_mbuf *) _m) = 0;
-	{ /* ensure the space */
-		if (iop->eth.tx.cnt > ETH_TX_BATCH / 2)
-			iip_ops_l2_flush(opaque);
-		while (iop->eth.tx.cnt == ETH_TX_BATCH)
-			iip_ops_l2_flush(opaque);
-	}
 	{
 		struct rte_mbuf *m = (struct rte_mbuf *) _m;
 		while (m) {
