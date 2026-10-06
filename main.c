@@ -16,6 +16,8 @@
  *
  */
 
+#ifndef SKIP_IOSUB_DEFINITION
+
 #include <rte_common.h>
 #include <rte_log.h>
 #include <rte_malloc.h>
@@ -65,7 +67,11 @@ static std::atomic<uint8_t> stat_idx = 0;
 static _Atomic uint8_t stat_idx = 0;
 #endif
 
+#define IIP_PKT_P struct rte_mbuf *
+
 struct io_opaque {
+	uint32_t ipv4_addr_be;
+	uint8_t ethernet_addr[6];
 	uint16_t portid;
 	uint16_t queueid;
 	uint16_t socketid;
@@ -84,6 +90,14 @@ struct io_opaque {
 		} eth;
 	} stat[2];
 };
+
+#define IIP_OPAQUE_P void *
+
+static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t local_ip4_be, uint16_t local_port_be, uint32_t peer_ip4_be, uint16_t peer_port_be, void *opaque);
+
+#endif
+
+#ifndef SKIP_IOSUB_IMPLEMENTATION
 
 static uint32_t ip4_addr_be[RTE_MAX_ETHPORTS];
 static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
@@ -154,80 +168,7 @@ static uint16_t helper_ip4_get_connection_affinity(uint16_t protocol, uint32_t l
 	}
 }
 
-static uint16_t iip_ops_l2_hdr_len(void *pkt, void *opaque)
-{
-	{/* unused */
-		(void) pkt;
-		(void) opaque;
-	}
-	return sizeof(struct rte_ether_hdr);
-}
-
-static uint8_t *iip_ops_l2_hdr_src_ptr(void *pkt, void *opaque)
-{
-	return ((struct rte_ether_hdr *)(iip_ops_pkt_get_data(pkt, opaque)))->src_addr.addr_bytes;
-}
-
-static uint8_t *iip_ops_l2_hdr_dst_ptr(void *pkt, void *opaque)
-{
-	return ((struct rte_ether_hdr *)(iip_ops_pkt_get_data(pkt, opaque)))->dst_addr.addr_bytes;
-}
-
-static uint8_t iip_ops_l2_skip(void *pkt, void *opaque)
-{
-	{/* unused */
-		(void) pkt;
-		(void) opaque;
-	}
-	return 0;
-}
-
-static uint16_t iip_ops_l2_ethertype_be(void *pkt, void *opaque)
-{
-	return ((struct rte_ether_hdr *)(iip_ops_pkt_get_data(pkt, opaque)))->ether_type;
-}
-
-static uint16_t iip_ops_l2_addr_len(void *opaque)
-{
-	{/* unused */
-		(void) opaque;
-	}
-	return 6;
-}
-
-static void iip_ops_l2_broadcast_addr(uint8_t bc_mac[], void *opaque)
-{
-	{/* unused */
-		(void) opaque;
-	}
-	memset(bc_mac, 0xff, 6);
-}
-
-static void iip_ops_l2_hdr_craft(void *pkt, uint8_t src[], uint8_t dst[], uint16_t ethertype_be, void *opaque)
-{
-	struct rte_ether_hdr *ethh = (struct rte_ether_hdr *) iip_ops_pkt_get_data(pkt, opaque);
-	memcpy(ethh->src_addr.addr_bytes, src, 6);
-	memcpy(ethh->dst_addr.addr_bytes, dst, 6);
-	ethh->ether_type = ethertype_be;
-}
-
-static uint8_t iip_ops_arp_lhw(void *opaque)
-{
-	{/* unused */
-		(void) opaque;
-	}
-	return 6;
-}
-
-static uint8_t iip_ops_arp_lproto(void *opaque)
-{
-	{/* unused */
-		(void) opaque;
-	}
-	return 4;
-}
-
-static void *iip_ops_pkt_alloc(void *opaque)
+static IIP_PKT_P dpdk_iip_ops_pkt_alloc(IIP_OPAQUE_P opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
@@ -235,40 +176,7 @@ static void *iip_ops_pkt_alloc(void *opaque)
 	return rte_pktmbuf_alloc(pktmbuf_pool[iop->socketid]);
 }
 
-static void iip_ops_pkt_free(void *pkt, void *opaque __attribute__((unused)))
-{
-	rte_pktmbuf_free((struct rte_mbuf *) pkt);
-}
-
-static void *iip_ops_pkt_get_data(void *pkt, void *opaque __attribute__((unused)))
-{
-	return rte_pktmbuf_mtod((struct rte_mbuf *) pkt, void *);
-}
-
-static uint16_t iip_ops_pkt_get_len(void *pkt, void *opaque __attribute__((unused)))
-{
-	return rte_pktmbuf_data_len((struct rte_mbuf *) pkt);
-}
-
-static void iip_ops_pkt_set_len(void *pkt, uint16_t len, void *opaque __attribute__((unused)))
-{
-	assert(pkt);
-	rte_pktmbuf_data_len((struct rte_mbuf *) pkt) = len;
-}
-
-static void iip_ops_pkt_increment_head(void *pkt, uint16_t len, void *opaque __attribute__((unused)))
-{
-	assert(pkt);
-	rte_pktmbuf_adj((struct rte_mbuf *) pkt, len);
-}
-
-static void iip_ops_pkt_decrement_tail(void *pkt, uint16_t len, void *opaque __attribute__((unused)))
-{
-	assert(pkt);
-	rte_pktmbuf_trim((struct rte_mbuf *) pkt, len);
-}
-
-static void *iip_ops_pkt_clone(void *pkt, void *opaque)
+static IIP_PKT_P dpdk_iip_ops_pkt_clone(IIP_PKT_P pkt, IIP_OPAQUE_P opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
@@ -277,17 +185,7 @@ static void *iip_ops_pkt_clone(void *pkt, void *opaque)
 	return rte_pktmbuf_clone((struct rte_mbuf *) pkt, pktmbuf_pool[iop->socketid]);
 }
 
-static void iip_ops_pkt_scatter_gather_chain_append(void *pkt_head, void *pkt_tail, void *opaque __attribute__((unused)))
-{
-	assert(!rte_pktmbuf_chain((struct rte_mbuf *) pkt_head, (struct rte_mbuf *) pkt_tail));
-}
-
-static void *iip_ops_pkt_scatter_gather_chain_get_next(void *pkt_head, void *opaque __attribute__((unused)))
-{
-	return ((struct rte_mbuf *) pkt_head)->next;
-}
-
-static void iip_ops_l2_flush(void *opaque)
+static int dpdk_iip_ops_ethernet_flush(IIP_OPAQUE_P opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
@@ -305,9 +203,10 @@ static void iip_ops_l2_flush(void *opaque)
 		iop->stat[stat_idx].eth.tx_fail += iop->eth.tx.cnt - cnt;
 		iop->eth.tx.cnt = 0;
 	}
+	return 0;
 }
 
-static void iip_ops_l2_push(void *_m, void *opaque)
+static int dpdk_iip_ops_ethernet_push(IIP_PKT_P _m, IIP_OPAQUE_P opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
@@ -321,145 +220,49 @@ static void iip_ops_l2_push(void *_m, void *opaque)
 	}
 	iop->eth.tx.m[iop->eth.tx.cnt++] = (struct rte_mbuf *) _m;
 	if (iop->eth.tx.cnt == ETH_TX_BATCH)
-		iip_ops_l2_flush(opaque);
+		dpdk_iip_ops_ethernet_flush(opaque);
+	return 0;
 }
 
-static uint8_t iip_ops_nic_feature_offload_tx_scatter_gather(void *opaque)
+static int dpdk_iip_ops_ethernet_hdr_craft(uint8_t *buf, const uint8_t *dst_ethernet_addr, uint16_t proto_be, IIP_OPAQUE_P opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
-	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_MULTI_SEGS ? 1 : 0);
+	buf[ 0] = dst_ethernet_addr[0];
+	buf[ 1] = dst_ethernet_addr[1];
+	buf[ 2] = dst_ethernet_addr[2];
+	buf[ 3] = dst_ethernet_addr[3];
+	buf[ 4] = dst_ethernet_addr[4];
+	buf[ 5] = dst_ethernet_addr[5];
+	buf[ 6] = iop->ethernet_addr[0];
+	buf[ 7] = iop->ethernet_addr[1];
+	buf[ 8] = iop->ethernet_addr[2];
+	buf[ 9] = iop->ethernet_addr[3];
+	buf[10] = iop->ethernet_addr[4];
+	buf[11] = iop->ethernet_addr[5];
+	buf[12] = proto_be % 256;
+	buf[13] = proto_be / 256;
+	return 0;
 }
 
-static uint8_t iip_ops_nic_feature_offload_rx_checksum(void *opaque)
+static bool dpdk_iip_ops_ethernet_addr_match(const uint8_t *ethernet_addr, IIP_OPAQUE_P opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
-	return (nic_conf[iop->portid].rxmode.offloads & RTE_ETH_RX_OFFLOAD_CHECKSUM ? 1 : 0);
+	if (!memcmp(ethernet_addr, iop->ethernet_addr, 6))
+		return true;
+	else
+		return false;
 }
 
-static uint8_t iip_ops_nic_feature_offload_ip4_rx_checksum(void *opaque)
-{
-	return iip_ops_nic_feature_offload_rx_checksum(opaque);
-}
-
-static uint8_t iip_ops_nic_feature_offload_ip4_tx_checksum(void *opaque)
+static bool dpdk_iip_ops_ipv4_addr_match(uint32_t ipv4_addr_be, IIP_OPAQUE_P opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
-	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM ? 1 : 0);
-}
-
-static uint8_t iip_ops_nic_offload_ip4_rx_checksum(void *m, void *opaque __attribute__((unused)))
-{
-	return ((((struct rte_mbuf *) m)->ol_flags & RTE_MBUF_F_RX_IP_CKSUM_GOOD) ? 1 : 0);
-}
-
-static uint8_t iip_ops_nic_offload_tcp_rx_checksum(void *m, void *opaque __attribute__((unused)))
-{
-	return ((((struct rte_mbuf *) m)->ol_flags & RTE_MBUF_F_RX_L4_CKSUM_GOOD) ? 1 : 0);
-}
-
-static uint8_t iip_ops_nic_offload_udp_rx_checksum(void *m, void *opaque __attribute__((unused)))
-{
-	return iip_ops_nic_offload_tcp_rx_checksum(m, opaque);
-}
-
-static void iip_ops_nic_offload_ip4_tx_checksum_mark(void *m, void *opaque __attribute__((unused)))
-{
-	((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4;
-	((struct rte_mbuf *) m)->l2_len = sizeof(struct rte_ether_hdr);
-	{
-		struct iip_ip4_hdr ip4h;
-		__iip_memcpy(&ip4h, (uint8_t *) iip_ops_pkt_get_data(m, opaque) + iip_ops_l2_hdr_len(m, opaque), sizeof(ip4h));
-		((struct rte_mbuf *) m)->l3_len = (ip4h.vl & 0x0f) * 4;
-	}
-}
-
-static uint8_t iip_ops_nic_feature_offload_tcp_rx_checksum(void *opaque)
-{
-	return iip_ops_nic_feature_offload_rx_checksum(opaque);
-}
-
-static uint8_t iip_ops_nic_feature_offload_tcp_tx_checksum(void *opaque)
-{
-	void **opaque_array = (void **) opaque;
-	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
-	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_TCP_CKSUM ? 1 : 0);
-}
-
-static uint8_t iip_ops_nic_feature_offload_tcp_tx_tso(void *opaque)
-{
-	void **opaque_array = (void **) opaque;
-	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
-	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_TCP_TSO ? 1 : 0);
-}
-
-static void iip_ops_nic_offload_tcp_tx_checksum_mark(void *m, void *opaque __attribute__((unused)))
-{
-	((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_TCP_CKSUM;
-}
-
-static void iip_ops_nic_offload_tcp_tx_tso_mark(void *m, void *opaque)
-{
-	struct iip_ip4_hdr ip4h;
-	__iip_memcpy(&ip4h, (uint8_t *) iip_ops_pkt_get_data(m, opaque) + iip_ops_l2_hdr_len(m, opaque), sizeof(ip4h));
-	uint16_t ip4_hdr_len = ((ip4h.vl & 0x0f) << 2);
-	{
-		struct iip_tcp_hdr tcph;
-		__iip_memcpy(&tcph, (uint8_t *) iip_ops_pkt_get_data(m, opaque) + iip_ops_l2_hdr_len(m, opaque) + ip4_hdr_len, sizeof(tcph));
-		uint16_t tcp_hdr_len = (((uint16_t) __iip_ntohs(tcph.flags) >> 12) << 2);
-		uint16_t tcp_payload_len = __iip_ntohs(ip4h.len_be) - ip4_hdr_len - tcp_hdr_len; /* TODO: include head_off and tail_off */
-		if (1500 - ip4_hdr_len - tcp_hdr_len < tcp_payload_len) {
-			((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
-			((struct rte_mbuf *) m)->l4_len = tcp_hdr_len;
-			assert(((struct rte_mbuf *) m)->ol_flags == (RTE_MBUF_F_TX_TCP_SEG | RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4));
-			assert(((struct rte_mbuf *) m)->l2_len == sizeof(struct rte_ether_hdr));
-			assert(((struct rte_mbuf *) m)->l3_len == ip4_hdr_len);
-			((struct rte_mbuf *) m)->tso_segsz = 1500 - ip4_hdr_len - tcp_hdr_len;
-		}
-	}
-}
-
-static uint8_t iip_ops_nic_feature_offload_udp_rx_checksum(void *opaque)
-{
-	return iip_ops_nic_feature_offload_rx_checksum(opaque);
-}
-
-static uint8_t iip_ops_nic_feature_offload_udp_tx_checksum(void *opaque)
-{
-	void **opaque_array = (void **) opaque;
-	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
-	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_UDP_CKSUM ? 1 : 0);
-}
-
-static uint8_t iip_ops_nic_feature_offload_udp_tx_tso(void *opaque __attribute__((unused)))
-{
-	void **opaque_array = (void **) opaque;
-	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
-	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_UDP_TSO ? 1 : 0);
-}
-
-static void iip_ops_nic_offload_udp_tx_checksum_mark(void *m, void *opaque __attribute__((unused)))
-{
-	((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_UDP_CKSUM;
-}
-
-static void iip_ops_nic_offload_udp_tx_tso_mark(void *m, void *opaque __attribute__((unused)))
-{
-	struct iip_ip4_hdr ip4h;
-	__iip_memcpy(&ip4h, (uint8_t *) iip_ops_pkt_get_data(m, opaque) + iip_ops_l2_hdr_len(m, opaque), sizeof(ip4h));
-	uint16_t ip4_hdr_len = ((ip4h.vl & 0x0f) << 2);
-	{
-		struct iip_udp_hdr udph;
-		__iip_memcpy(&udph, (uint8_t *) iip_ops_pkt_get_data(m, opaque) + iip_ops_l2_hdr_len(m, opaque) + ip4_hdr_len, sizeof(udph));
-		uint16_t udp_payload_len = __iip_ntohs(udph.len_be) - sizeof(struct iip_udp_hdr);
-		if (1500 - ip4_hdr_len - sizeof(struct iip_udp_hdr) < udp_payload_len) {
-			((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_UDP_SEG;
-			((struct rte_mbuf *) m)->l4_len = sizeof(struct iip_udp_hdr);
-			((struct rte_mbuf *) m)->tso_segsz = 1500 - ip4_hdr_len - sizeof(struct iip_udp_hdr);
-		}
-	}
+	if (iop->ipv4_addr_be == ipv4_addr_be)
+		return true;
+	else
+		return false;
 }
 
 /* thread loop */
@@ -480,23 +283,21 @@ static int lcore_thread_fn(void *__app_global_opaque)
 			assert(!rte_eth_dev_rx_intr_ctl_q(portid, core_idx, RTE_EPOLL_PER_THREAD, RTE_INTR_EVENT_ADD, NULL));
 	}
 	{
-		void *workspace = rte_zmalloc(NULL, iip_workspace_size(), 8);
-		assert(workspace);
-		{ /* allocate and associate memory for packet representation structure */
-			uint32_t i;
-			for (i = 0; i < NUM_NETSTACK_PB; i++) {
-				void *p = rte_zmalloc(NULL, iip_pb_size(), 8);
-				assert(p);
-				iip_add_pb(workspace, p);
-			}
+		uint16_t portid;
+		RTE_ETH_FOREACH_DEV(portid) {
+			memcpy(io_opaque[core_idx][portid].ethernet_addr, ports_eth_addr[portid].addr_bytes, 6);
+			io_opaque[core_idx][portid].ipv4_addr_be = ip4_addr_be[portid];
 		}
-		{ /* allocate and associate memory for  tcp connection */
-			uint16_t i;
-			for (i = 0; i < NUM_NETSTACK_TCP_CONN; i++) {
-				void *conn = rte_zmalloc(NULL, iip_tcp_conn_size(), 8);
-				assert(conn);
-				iip_add_tcp_conn(workspace, conn);
-			}
+	}
+	{
+		void *workspace = rte_zmalloc(NULL, sizeof(struct iip_workspace), 8);
+		assert(workspace);
+		{
+			struct iip_workspace *w = workspace;
+			for (uint32_t i = 0; i < II_CONF_POOL_NUM_PB; i++)
+				w->pbs.queue[i] = i;
+			for (uint32_t i = 0; i < II_CONF_POOL_NUM_TCP_CONN; i++)
+				w->tcp_conns.queue[i] = i;
 		}
 		{ /* call app thread init */
 			void *opaque[3] = { &io_opaque[core_idx], __app_global_opaque, NULL, };
@@ -512,14 +313,21 @@ static int lcore_thread_fn(void *__app_global_opaque)
 							RTE_ETH_FOREACH_DEV(portid) {
 								opaque[0] = (void *) &io_opaque[core_idx][portid];
 								{
+									uint32_t t[3];
+									iip_ops_util_now_ns(t, opaque);
+									{
+										struct iip_workspace *w = workspace;
+										w->now_ms = (t[1] * 1000UL + t[2] / 1000000UL);
+									}
+								}
+								{
 									struct rte_mbuf *m[ETH_RX_BATCH];
 									uint16_t cnt = rte_eth_rx_burst(portid, core_idx, m, ETH_RX_BATCH);
 									total_rx_cnt += cnt;
 									io_opaque[core_idx][portid].stat[stat_idx].eth.rx_pkt += cnt;
 									{
 										uint32_t _next_us;
-										iip_run(workspace, ports_eth_addr[portid].addr_bytes,
-												ip4_addr_be[portid], (void **) m, cnt, &_next_us, opaque);
+										iip_run(workspace, m, cnt, &_next_us, opaque);
 										next_us = _next_us < next_us ? _next_us : next_us;
 									}
 								}
@@ -852,13 +660,12 @@ static int __iosub_main(int argc, char *const *argv)
 	{
 		void *app_global_opaque = __app_init(argc, argv);
 		rte_eal_mp_remote_launch(lcore_thread_fn, app_global_opaque, CALL_MAIN); /* start worker threads */
+		{ /* wait for threads */
+			unsigned lcore_id;
+			RTE_LCORE_FOREACH_WORKER(lcore_id)
+				assert(!rte_eal_wait_lcore(lcore_id));
+		}
 		__app_exit(app_global_opaque);
-	}
-
-	{ /* wait for threads */
-		unsigned lcore_id;
-		RTE_LCORE_FOREACH_WORKER(lcore_id)
-			assert(!rte_eal_wait_lcore(lcore_id));
 	}
 
 	{ /* stop */
@@ -875,3 +682,27 @@ static int __iosub_main(int argc, char *const *argv)
 
 	return 0;
 }
+
+static bool dpddk_iip_ops_nic_feature_offload_tx_scatter_gather(void *opaque)
+{
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_MULTI_SEGS ? true : false);
+}
+
+#define IIP_OPS_PKT_GET_CAPACITY() do { iip_ret_len = 1500; } while (0)
+#define IIP_OPS_PKT_ALLOC() do { *pkt = dpdk_iip_ops_pkt_alloc(opaque); iip_ret_int = 0; } while (0)
+#define IIP_OPS_PKT_FREE() do { rte_pktmbuf_free((struct rte_mbuf *) pkt); iip_ret_int = 0; } while (0)
+#define IIP_OPS_PKT_GET_DATA() do { iip_ret_u8_ptr = rte_pktmbuf_mtod((struct rte_mbuf *) pkt, uint8_t *); } while (0)
+#define IIP_OPS_PKT_GET_LEN() do { iip_ret_len = rte_pktmbuf_data_len((struct rte_mbuf *) pkt); } while (0)
+#define IIP_OPS_PKT_SET_LEN() do { rte_pktmbuf_data_len((struct rte_mbuf *) pkt) = len; iip_ret_int = 0; } while (0)
+#define IIP_OPS_PKT_CLONE() do { *cloned_pkt = dpdk_iip_ops_pkt_clone(pkt, opaque); iip_ret_int = 0; } while (0)
+#define IIP_OPS_PKT_SCATTER_GATHER_APPEND() do { rte_pktmbuf_chain((struct rte_mbuf *) head_pkt, (struct rte_mbuf *) tail_pkt); iip_ret_int = 0; } while (0)
+#define IIP_OPS_ETHERNET_FLUSH() do { dpdk_iip_ops_ethernet_flush(opaque); iip_ret_int = 0; } while (0)
+#define IIP_OPS_ETHERNET_PUSH() do { dpdk_iip_ops_ethernet_push(pkt, opaque); iip_ret_int = 0; } while (0)
+#define IIP_OPS_ETHERNET_HDR_CRAFT() do { iip_ret_int = dpdk_iip_ops_ethernet_hdr_craft(buf, dst_addr, proto_be, opaque); } while (0)
+#define IIP_OPS_ETHERNET_ADDR_MATCH() do { iip_ret_bool = dpdk_iip_ops_ethernet_addr_match(buf, opaque); } while (0)
+#define IIP_OPS_IPV4_ADDR_MATCH() do { iip_ret_bool = dpdk_iip_ops_ipv4_addr_match(ii_read_uint32(ii_call_pkt_get_data(rx_pkt, opaque) + II_ETH_HDR_LEN + II_ARP_HDR_LEN + 16), opaque); } while (0)
+#define IIP_OPS_NIC_FEATURE_OFFLOAD_TX_SCATTER_GATHER() do { iip_ret_bool = dpddk_iip_ops_nic_feature_offload_tx_scatter_gather(opaque); } while (0)
+
+#endif
