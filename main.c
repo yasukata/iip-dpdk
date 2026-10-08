@@ -683,11 +683,121 @@ static int __iosub_main(int argc, char *const *argv)
 	return 0;
 }
 
-static bool dpddk_iip_ops_nic_feature_offload_tx_scatter_gather(void *opaque)
+static bool dpdk_iip_ops_nic_feature_offload_tx_scatter_gather(void *opaque)
 {
 	void **opaque_array = (void **) opaque;
 	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
 	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_MULTI_SEGS ? true : false);
+}
+
+static bool dpdk_iip_ops_nic_feature_offload_rx_checksum(void *opaque)
+{
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	return (nic_conf[iop->portid].rxmode.offloads & RTE_ETH_RX_OFFLOAD_CHECKSUM ? true : false);
+}
+
+static uint8_t dpdk_iip_ops_nic_feature_offload_ipv4_rx_checksum(void *opaque)
+{
+	return dpdk_iip_ops_nic_feature_offload_rx_checksum(opaque);
+}
+
+static bool dpdk_iip_ops_nic_feature_offload_ipv4_tx_checksum(void *opaque)
+{
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM ? true : false);
+}
+
+static bool dpdk_iip_ops_nic_offload_ipv4_rx_checksum(struct rte_mbuf *m)
+{
+	return ((m->ol_flags & RTE_MBUF_F_RX_IP_CKSUM_GOOD) ? true : false);
+}
+
+static bool dpdk_iip_ops_nic_offload_tcp_rx_checksum(struct rte_mbuf *m)
+{
+	return ((m->ol_flags & RTE_MBUF_F_RX_L4_CKSUM_GOOD) ? true : false);
+}
+
+static uint8_t dpdk_iip_ops_nic_offload_udp_rx_checksum(struct rte_mbuf *m)
+{
+	return dpdk_iip_ops_nic_offload_tcp_rx_checksum(m);
+}
+
+static void dpdk_iip_ops_nic_offload_ipv4_tx_checksum_mark(uint8_t l2_len, uint8_t l3_len, struct rte_mbuf *m)
+{
+	((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4;
+	((struct rte_mbuf *) m)->l2_len = l2_len;
+	((struct rte_mbuf *) m)->l3_len = l3_len;
+}
+
+static uint8_t dpdk_iip_ops_nic_feature_offload_tcp_rx_checksum(void *opaque)
+{
+	return dpdk_iip_ops_nic_feature_offload_rx_checksum(opaque);
+}
+
+static bool dpdk_iip_ops_nic_feature_offload_tcp_tx_checksum(void *opaque)
+{
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_TCP_CKSUM ? true : false);
+}
+
+static bool dpdk_iip_ops_nic_feature_offload_tcp_tx_tso(void *opaque)
+{
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_TCP_TSO ? true : false);
+}
+
+static void dpdk_iip_ops_nic_offload_tcp_tx_checksum_mark(struct rte_mbuf *m)
+{
+	m->ol_flags |= RTE_MBUF_F_TX_TCP_CKSUM;
+}
+
+static void dpdk_iip_ops_nic_offload_tcp_tx_tso_mark(uint8_t l3_hdr_len, uint8_t l4_hdr_len, uint16_t payload_len, struct rte_mbuf *m)
+{
+	if (1500 - l3_hdr_len - l4_hdr_len < payload_len) {
+		m->ol_flags |= RTE_MBUF_F_TX_TCP_SEG;
+		m->l4_len = l4_hdr_len;
+		assert(m->ol_flags == (RTE_MBUF_F_TX_TCP_SEG | RTE_MBUF_F_TX_TCP_CKSUM | RTE_MBUF_F_TX_IP_CKSUM | RTE_MBUF_F_TX_IPV4));
+		assert(m->l2_len == sizeof(struct rte_ether_hdr));
+		assert(m->l3_len == l3_hdr_len);
+		((struct rte_mbuf *) m)->tso_segsz = 1500 - l3_hdr_len - l4_hdr_len;
+	}
+}
+
+static uint8_t dpdk_iip_ops_nic_feature_offload_udp_rx_checksum(void *opaque)
+{
+	return dpdk_iip_ops_nic_feature_offload_rx_checksum(opaque);
+}
+
+static bool dpdk_iip_ops_nic_feature_offload_udp_tx_checksum(void *opaque)
+{
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_UDP_CKSUM ? true : false);
+}
+
+static bool dpdk_iip_ops_nic_feature_offload_udp_tx_tso(void *opaque)
+{
+	void **opaque_array = (void **) opaque;
+	struct io_opaque *iop = (struct io_opaque *) opaque_array[0];
+	return (nic_conf[iop->portid].txmode.offloads & RTE_ETH_TX_OFFLOAD_UDP_TSO ? true : false);
+}
+
+static void dpdk_iip_ops_nic_offload_udp_tx_checksum_mark(struct rte_mbuf *m)
+{
+	m->ol_flags |= RTE_MBUF_F_TX_UDP_CKSUM;
+}
+
+static void dpdk_iip_ops_nic_offload_udp_tx_tso_mark(uint8_t l3_hdr_len, uint8_t l4_hdr_len, uint16_t payload_len, struct rte_mbuf *m)
+{
+	if (1500 - l3_hdr_len - l4_hdr_len < payload_len) {
+		((struct rte_mbuf *) m)->ol_flags |= RTE_MBUF_F_TX_UDP_SEG;
+		((struct rte_mbuf *) m)->l4_len = l4_hdr_len;
+		((struct rte_mbuf *) m)->tso_segsz = 1500 - l3_hdr_len - l4_hdr_len;
+	}
 }
 
 #define IIP_OPS_PKT_GET_CAPACITY() do { iip_ret_len = 1500; } while (0)
@@ -703,6 +813,36 @@ static bool dpddk_iip_ops_nic_feature_offload_tx_scatter_gather(void *opaque)
 #define IIP_OPS_ETHERNET_HDR_CRAFT() do { iip_ret_int = dpdk_iip_ops_ethernet_hdr_craft(buf, dst_addr, proto_be, opaque); } while (0)
 #define IIP_OPS_ETHERNET_ADDR_MATCH() do { iip_ret_bool = dpdk_iip_ops_ethernet_addr_match(buf, opaque); } while (0)
 #define IIP_OPS_IPV4_ADDR_MATCH() do { iip_ret_bool = dpdk_iip_ops_ipv4_addr_match(ii_read_uint32(ii_call_pkt_get_data(rx_pkt, opaque) + II_ETH_HDR_LEN + II_ARP_HDR_LEN + 16), opaque); } while (0)
-#define IIP_OPS_NIC_FEATURE_OFFLOAD_TX_SCATTER_GATHER() do { iip_ret_bool = dpddk_iip_ops_nic_feature_offload_tx_scatter_gather(opaque); } while (0)
+#define IIP_OPS_NIC_FEATURE_OFFLOAD_TX_SCATTER_GATHER() do { iip_ret_bool = dpdk_iip_ops_nic_feature_offload_tx_scatter_gather(opaque); } while (0)
+#define IIP_OPS_IPV4_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_ipv4_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_ipv4_rx_checksum(rx_pkt) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
+#define IIP_OPS_IPV4_TX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_ipv4_tx_checksum(opaque)) { dpdk_iip_ops_nic_offload_ipv4_tx_checksum_mark(off, len, tx_pkt); return IIP_ERR_OK; } } while (0)
+#define IIP_OPS_TCP_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_tcp_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_tcp_rx_checksum(II_PB(pb_id).part_pkt[0]) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
+#define IIP_OPS_UDP_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_udp_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_udp_rx_checksum(II_PB(pb_id).part_pkt[0]) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
+#define IIP_OPS_TCP_TX_SKIP_SW_CHECKSUM() do { iip_ret_bool = dpdk_iip_ops_nic_feature_offload_tcp_tx_checksum(opaque); } while (0)
+#define IIP_OPS_UDP_TX_SKIP_SW_CHECKSUM() do { iip_ret_bool = dpdk_iip_ops_nic_feature_offload_udp_tx_checksum(opaque); } while (0)
+#define II_HOOK_TX_IPV4_ETHERNET() \
+	do { \
+		if (proto == 6) { \
+			if (dpdk_iip_ops_nic_feature_offload_tcp_tx_checksum(opaque)) \
+				dpdk_iip_ops_nic_offload_tcp_tx_checksum_mark(tx_pkt); \
+		} else if (proto == 17) { \
+			if (dpdk_iip_ops_nic_feature_offload_udp_tx_checksum(opaque)) \
+				dpdk_iip_ops_nic_offload_udp_tx_checksum_mark(tx_pkt); \
+		} \
+	} while (0)
+#define II_HOOK_TX_IPV4_ETHERNET_ZERO_COPY() \
+	do { \
+		if (proto == 6) { \
+			if (dpdk_iip_ops_nic_feature_offload_tcp_tx_checksum(opaque)) \
+				dpdk_iip_ops_nic_offload_tcp_tx_checksum_mark(head_pkt); \
+			if (dpdk_iip_ops_nic_feature_offload_tcp_tx_tso(opaque)) \
+				dpdk_iip_ops_nic_offload_tcp_tx_tso_mark(II_IPV4_HDR_LEN_MINIMAL, hdr_len, payload_len, head_pkt); \
+		} else if (proto == 17) { \
+			if (dpdk_iip_ops_nic_feature_offload_udp_tx_checksum(opaque)) \
+				dpdk_iip_ops_nic_offload_udp_tx_checksum_mark(head_pkt); \
+			if (dpdk_iip_ops_nic_feature_offload_udp_tx_tso(opaque)) \
+				dpdk_iip_ops_nic_offload_udp_tx_tso_mark(II_IPV4_HDR_LEN_MINIMAL, hdr_len, payload_len, head_pkt); \
+		} \
+	} while (0)
 
 #endif
