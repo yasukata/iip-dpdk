@@ -801,12 +801,12 @@ static void dpdk_iip_ops_nic_offload_udp_tx_tso_mark(uint8_t l3_hdr_len, uint8_t
 }
 
 #define IIP_OPS_PKT_GET_CAPACITY() do { iip_ret_len = 1500; } while (0)
-#define IIP_OPS_PKT_ALLOC() do { *pkt = dpdk_iip_ops_pkt_alloc(opaque); iip_ret_int = 0; } while (0)
+#define IIP_OPS_PKT_ALLOC() do { *pkt = dpdk_iip_ops_pkt_alloc(opaque); iip_ret_int = (*pkt ? 0 : -1); } while (0)
 #define IIP_OPS_PKT_FREE() do { rte_pktmbuf_free((struct rte_mbuf *) pkt); iip_ret_int = 0; } while (0)
 #define IIP_OPS_PKT_GET_DATA() do { iip_ret_u8_ptr = rte_pktmbuf_mtod((struct rte_mbuf *) pkt, uint8_t *); } while (0)
 #define IIP_OPS_PKT_GET_LEN() do { iip_ret_len = rte_pktmbuf_data_len((struct rte_mbuf *) pkt); } while (0)
 #define IIP_OPS_PKT_SET_LEN() do { rte_pktmbuf_data_len((struct rte_mbuf *) pkt) = len; iip_ret_int = 0; } while (0)
-#define IIP_OPS_PKT_CLONE() do { *cloned_pkt = dpdk_iip_ops_pkt_clone(pkt, opaque); iip_ret_int = 0; } while (0)
+#define IIP_OPS_PKT_CLONE() do { *cloned_pkt = dpdk_iip_ops_pkt_clone(pkt, opaque); iip_ret_int = (*cloned_pkt ? 0 : -1); } while (0)
 #define IIP_OPS_PKT_SCATTER_GATHER_APPEND() do { rte_pktmbuf_chain((struct rte_mbuf *) head_pkt, (struct rte_mbuf *) tail_pkt); iip_ret_int = 0; } while (0)
 #define IIP_OPS_ETHERNET_FLUSH() do { dpdk_iip_ops_ethernet_flush(opaque); iip_ret_int = 0; } while (0)
 #define IIP_OPS_ETHERNET_PUSH() do { dpdk_iip_ops_ethernet_push(pkt, opaque); iip_ret_int = 0; } while (0)
