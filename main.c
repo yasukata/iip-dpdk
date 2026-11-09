@@ -800,10 +800,29 @@ static void dpdk_iip_ops_nic_offload_udp_tx_tso_mark(uint8_t l3_hdr_len, uint8_t
 	}
 }
 
+static long dpdk_iip_ops_pkt_data_read(IIP_PKT_P pkt_ref, uint8_t *buf, IIP_PKT_LEN_T len, IIP_PKT_LEN_T off, IIP_OPAQUE_P opaque)
+{
+	memcpy(buf, rte_pktmbuf_mtod(pkt_ref, uint8_t *) + off, len);
+	return len;
+	{ /* unused */
+		(void) opaque;
+	}
+}
+
+static long dpdk_iip_ops_pkt_data_write(IIP_PKT_P pkt_ref, const uint8_t *buf, IIP_PKT_LEN_T len, IIP_PKT_LEN_T off, IIP_OPAQUE_P opaque)
+{
+	memcpy(rte_pktmbuf_mtod(pkt_ref, uint8_t *) + off, buf, len);
+	return len;
+	{ /* unused */
+		(void) opaque;
+	}
+}
+
 #define IIP_OPS_PKT_GET_CAPACITY() do { iip_ret_len = 1500; } while (0)
 #define IIP_OPS_PKT_ALLOC() do { *pkt = dpdk_iip_ops_pkt_alloc(opaque); iip_ret_int = (*pkt ? 0 : -1); } while (0)
 #define IIP_OPS_PKT_FREE() do { rte_pktmbuf_free((struct rte_mbuf *) pkt); iip_ret_int = 0; } while (0)
-#define IIP_OPS_PKT_GET_DATA() do { iip_ret_u8_ptr = rte_pktmbuf_mtod((struct rte_mbuf *) pkt, uint8_t *); } while (0)
+#define IIP_OPS_PKT_DATA_READ() do { iip_ret_long = dpdk_iip_ops_pkt_data_read(pkt, buf, len, off, opaque); } while (0)
+#define IIP_OPS_PKT_DATA_WRITE() do { iip_ret_long = dpdk_iip_ops_pkt_data_write(pkt, buf, len, off, opaque); } while (0)
 #define IIP_OPS_PKT_GET_LEN() do { iip_ret_len = rte_pktmbuf_data_len((struct rte_mbuf *) pkt); } while (0)
 #define IIP_OPS_PKT_SET_LEN() do { rte_pktmbuf_data_len((struct rte_mbuf *) pkt) = len; iip_ret_int = 0; } while (0)
 #define IIP_OPS_PKT_CLONE() do { *cloned_pkt = dpdk_iip_ops_pkt_clone(pkt, opaque); iip_ret_int = (*cloned_pkt ? 0 : -1); } while (0)
@@ -812,12 +831,12 @@ static void dpdk_iip_ops_nic_offload_udp_tx_tso_mark(uint8_t l3_hdr_len, uint8_t
 #define IIP_OPS_ETHERNET_PUSH() do { dpdk_iip_ops_ethernet_push(pkt, opaque); iip_ret_int = 0; } while (0)
 #define IIP_OPS_ETHERNET_HDR_CRAFT() do { iip_ret_int = dpdk_iip_ops_ethernet_hdr_craft(buf, dst_addr, proto_be, opaque); } while (0)
 #define IIP_OPS_ETHERNET_ADDR_MATCH() do { iip_ret_bool = dpdk_iip_ops_ethernet_addr_match(buf, opaque); } while (0)
-#define IIP_OPS_IPV4_ADDR_MATCH() do { iip_ret_bool = dpdk_iip_ops_ipv4_addr_match(ii_read_uint32(ii_call_pkt_get_data(rx_pkt, opaque) + II_ETH_HDR_LEN + II_ARP_HDR_LEN + 16), opaque); } while (0)
+#define IIP_OPS_IPV4_ADDR_MATCH() do { iip_ret_bool = dpdk_iip_ops_ipv4_addr_match(ipv4_addr_be, opaque); } while (0)
 #define IIP_OPS_NIC_FEATURE_OFFLOAD_TX_SCATTER_GATHER() do { iip_ret_bool = dpdk_iip_ops_nic_feature_offload_tx_scatter_gather(opaque); } while (0)
 #define IIP_OPS_IPV4_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_ipv4_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_ipv4_rx_checksum(rx_pkt) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
 #define IIP_OPS_IPV4_TX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_ipv4_tx_checksum(opaque)) { dpdk_iip_ops_nic_offload_ipv4_tx_checksum_mark(off, len, tx_pkt); return IIP_ERR_OK; } } while (0)
-#define IIP_OPS_TCP_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_tcp_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_tcp_rx_checksum(II_PB(pb_id).part_pkt[0]) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
-#define IIP_OPS_UDP_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_udp_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_udp_rx_checksum(II_PB(pb_id).part_pkt[0]) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
+#define IIP_OPS_TCP_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_tcp_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_tcp_rx_checksum(II_PB(pb_id).part_pkt[0].p) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
+#define IIP_OPS_UDP_RX_CHECKSUM() do { if (dpdk_iip_ops_nic_feature_offload_udp_rx_checksum(opaque)) { return dpdk_iip_ops_nic_offload_udp_rx_checksum(II_PB(pb_id).part_pkt[0].p) ? IIP_ERR_OK : IIP_ERR_INVALID_RX; } } while (0)
 #define IIP_OPS_TCP_TX_SKIP_SW_CHECKSUM() do { iip_ret_bool = dpdk_iip_ops_nic_feature_offload_tcp_tx_checksum(opaque); } while (0)
 #define IIP_OPS_UDP_TX_SKIP_SW_CHECKSUM() do { iip_ret_bool = dpdk_iip_ops_nic_feature_offload_udp_tx_checksum(opaque); } while (0)
 #define II_HOOK_TX_IPV4_ETHERNET() \
